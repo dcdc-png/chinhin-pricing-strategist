@@ -4,6 +4,7 @@ module.exports = {
     ignoreDuringBuilds: true,
   },
   images: {
-    unoptimized: true,
+    loader: 'akamai',
+    path: '',
   },
 };
