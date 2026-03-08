@@ -1,7 +1,7 @@
 azure-functions
 pandas
 openpyxl
-azure-ai-projects
+azure-ai-projects>=2.0.0b1
 azure-identity
 azure-storage-blob
 python-dotenv

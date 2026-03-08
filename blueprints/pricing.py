@@ -67,10 +67,20 @@ def load_excel():
 
 
 # ---------------------------------------------------------------------------
-# OpenAI client helper
+# Key Adapter for AIProjectClient
 # ---------------------------------------------------------------------------
-def _get_openai_client():
-    from openai import AzureOpenAI
+class KeyTokenCredentialAdapter:
+    """Adapts an API Key to the TokenCredential interface required by AIProjectClient."""
+    def __init__(self, key: str):
+        self.key = key
+    def get_token(self, *scopes, **kwargs):
+        import time
+        from azure.core.credentials import AccessToken
+        # Many Azure AI services accept the API key as a Bearer token in this context
+        return AccessToken(self.key, int(time.time()) + 3600)
+
+def _get_project_client():
+    """Returns a configured AIProjectClient."""
     from azure.ai.projects import AIProjectClient
     from azure.identity import DefaultAzureCredential
 
@@ -78,21 +88,22 @@ def _get_openai_client():
     if not cfg["PROJECT_ENDPOINT"]:
         raise RuntimeError("PROJECT_ENDPOINT is not configured.")
     
-    # Use API Key if provided, else fallback to Managed Identity (DefaultAzureCredential)
+    # Use API Key adapter if provided, else fallback to Managed Identity (DefaultAzureCredential)
     if cfg["PROJECT_KEY"]:
-        logging.info("Using AzureOpenAI directly with API Key")
-        return AzureOpenAI(
-            azure_endpoint=cfg["PROJECT_ENDPOINT"],
-            api_key=cfg["PROJECT_KEY"],
-            api_version="2024-05-01"
-        )
+        logging.info("Using AIProjectClient with API Key (Adapter)")
+        credential = KeyTokenCredentialAdapter(cfg["PROJECT_KEY"])
     else:
         logging.info("Using AIProjectClient with DefaultAzureCredential")
-        return AIProjectClient(
-            endpoint=cfg["PROJECT_ENDPOINT"],
-            credential=DefaultAzureCredential(),
-        ).get_openai_client()
+        credential = DefaultAzureCredential()
 
+    return AIProjectClient(
+        endpoint=cfg["PROJECT_ENDPOINT"],
+        credential=credential,
+    )
+
+def _get_openai_client():
+    """Returns the OpenAI-compatible client from the project."""
+    return _get_project_client().get_openai_client()
 
 # ---------------------------------------------------------------------------
 # Helper: SSE header dict
@@ -364,10 +375,9 @@ Rules:
             full_text = ""
 
             with client.responses.stream(
-                model=cfg["AGENT_MODEL"],
                 input=[{"role": "user", "content": prompt}],
                 extra_body={
-                    "agent_reference": {
+                    "agent": {
                         "name": cfg["AGENT_NAME"],
                         "version": cfg["AGENT_VERSION"],
                         "type": "agent_reference",
@@ -486,13 +496,12 @@ def chat(req: func.HttpRequest) -> func.HttpResponse:
             full_text = ""
 
             with client.responses.stream(
-                model=cfg["AGENT_MODEL"],
                 input=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user",   "content": message},
                 ],
                 extra_body={
-                    "agent_reference": {
+                    "agent": {
                         "name": cfg["AGENT_NAME"],
                         "version": cfg["AGENT_VERSION"],
                         "type": "agent_reference",
