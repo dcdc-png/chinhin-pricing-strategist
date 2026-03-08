@@ -34,6 +34,3 @@ yarn-error.log*
 .python_packages
 __pycache__
 .venv
-
-local.settings.json
-.local.settings.json
