@@ -66,32 +66,20 @@ def load_excel():
         return False
 
 
-# ---------------------------------------------------------------------------
-# Key Adapter for AIProjectClient
-# ---------------------------------------------------------------------------
-class KeyTokenCredentialAdapter:
-    """Adapts an API Key to the TokenCredential interface required by AIProjectClient."""
-    def __init__(self, key: str):
-        self.key = key
-    def get_token(self, *scopes, **kwargs):
-        import time
-        from azure.core.credentials import AccessToken
-        # Many Azure AI services accept the API key as a Bearer token in this context
-        return AccessToken(self.key, int(time.time()) + 3600)
-
 def _get_project_client():
     """Returns a configured AIProjectClient."""
     from azure.ai.projects import AIProjectClient
     from azure.identity import DefaultAzureCredential
+    from azure.core.credentials import AzureKeyCredential
 
     cfg = get_config()
     if not cfg["PROJECT_ENDPOINT"]:
         raise RuntimeError("PROJECT_ENDPOINT is not configured.")
     
-    # Use API Key adapter if provided, else fallback to Managed Identity (DefaultAzureCredential)
+    # Use AzureKeyCredential if provided, else fallback to Managed Identity (DefaultAzureCredential)
     if cfg["PROJECT_KEY"]:
-        logging.info("Using AIProjectClient with API Key (Adapter)")
-        credential = KeyTokenCredentialAdapter(cfg["PROJECT_KEY"])
+        logging.info("Using AIProjectClient with AzureKeyCredential")
+        credential = AzureKeyCredential(cfg["PROJECT_KEY"])
     else:
         logging.info("Using AIProjectClient with DefaultAzureCredential")
         credential = DefaultAzureCredential()
