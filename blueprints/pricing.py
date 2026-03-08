@@ -66,28 +66,53 @@ def load_excel():
         return False
 
 
+# ---------------------------------------------------------------------------
+# Authentication Workaround for AIProjectClient
+# ---------------------------------------------------------------------------
+from azure.core.pipeline.policies import SansIOHTTPPolicy
+
+class ApiKeyPolicy(SansIOHTTPPolicy):
+    """Bypasses TokenCredential logic by injecting the api-key header manually."""
+    def __init__(self, key: str):
+        super().__init__()
+        self.key = key
+    def on_request(self, request):
+        request.http_request.headers["api-key"] = self.key
+        if "Authorization" in request.http_request.headers:
+            del request.http_request.headers["Authorization"]
+
+class DummyTokenCredential:
+    """Satisfies AIProjectClient's requirement for a credential object."""
+    def get_token(self, *scopes, **kwargs):
+        from azure.core.credentials import AccessToken
+        import time
+        return AccessToken("dummy", int(time.time()) + 3600)
+
 def _get_project_client():
-    """Returns a configured AIProjectClient."""
+    """Returns a configured AIProjectClient with key-based policy injection."""
     from azure.ai.projects import AIProjectClient
     from azure.identity import DefaultAzureCredential
-    from azure.core.credentials import AzureKeyCredential
 
     cfg = get_config()
     if not cfg["PROJECT_ENDPOINT"]:
         raise RuntimeError("PROJECT_ENDPOINT is not configured.")
     
-    # Use AzureKeyCredential if provided, else fallback to Managed Identity (DefaultAzureCredential)
     if cfg["PROJECT_KEY"]:
-        logging.info("Using AIProjectClient with AzureKeyCredential")
-        credential = AzureKeyCredential(cfg["PROJECT_KEY"])
+        logging.info("Using AIProjectClient with ApiKeyPolicy injection")
+        # Initialize with dummy token to avoid attribute errors, then inject key policy
+        client = AIProjectClient(
+            endpoint=cfg["PROJECT_ENDPOINT"],
+            credential=DummyTokenCredential(),
+        )
+        # Inject the policy at the start of the pipeline
+        client._client._pipeline._policies.insert(0, ApiKeyPolicy(cfg["PROJECT_KEY"]))
+        return client
     else:
         logging.info("Using AIProjectClient with DefaultAzureCredential")
-        credential = DefaultAzureCredential()
-
-    return AIProjectClient(
-        endpoint=cfg["PROJECT_ENDPOINT"],
-        credential=credential,
-    )
+        return AIProjectClient(
+            endpoint=cfg["PROJECT_ENDPOINT"],
+            credential=DefaultAzureCredential(),
+        )
 
 def _get_openai_client():
     """Returns the OpenAI-compatible client from the project."""
