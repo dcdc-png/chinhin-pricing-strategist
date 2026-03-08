@@ -1,7 +1,7 @@
 import azure.functions as func
 
-from routes.api import bp as api_bp
-from routes.pricing import bp as pricing_bp
+from api import bp as api_bp
+from pricing import bp as pricing_bp
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 
