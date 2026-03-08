@@ -13,6 +13,7 @@ import azure.functions as func
 import pandas as pd
 from azure.ai.projects import AIProjectClient
 from azure.identity import DefaultAzureCredential
+from azure.core.credentials import AzureKeyCredential
 
 bp = func.Blueprint()
 
@@ -23,6 +24,7 @@ def get_config():
     """Helper to fetch config only when needed (after env vars load)."""
     return {
         "PROJECT_ENDPOINT": os.getenv("PROJECT_ENDPOINT", ""),
+        "PROJECT_KEY":      os.getenv("AZURE_AI_PROJECT_KEY", ""),
         "AGENT_NAME":       os.getenv("AZURE_AI_AGENT_NAME", "AI-Pricing-Strategist"),
         "AGENT_VERSION":    os.getenv("AZURE_AI_AGENT_VERSION", "3"),
         "AGENT_MODEL":      os.getenv("AZURE_AI_AGENT_MODEL", "gpt-4.1-nano"),
@@ -74,9 +76,18 @@ def _get_openai_client():
     cfg = get_config()
     if not cfg["PROJECT_ENDPOINT"]:
         raise RuntimeError("PROJECT_ENDPOINT is not configured.")
+    
+    # Use API Key if provided, else fallback to Managed Identity / DefaultAzureCredential
+    if cfg["PROJECT_KEY"]:
+        logging.info("Using AzureKeyCredential for AIProjectClient")
+        credential = AzureKeyCredential(cfg["PROJECT_KEY"])
+    else:
+        logging.info("Using DefaultAzureCredential for AIProjectClient")
+        credential = DefaultAzureCredential()
+
     return AIProjectClient(
         endpoint=cfg["PROJECT_ENDPOINT"],
-        credential=DefaultAzureCredential(),
+        credential=credential,
     ).get_openai_client()
 
 
