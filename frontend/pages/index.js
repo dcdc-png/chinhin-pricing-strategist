@@ -200,9 +200,8 @@ export default function LoginPage() {
                       ) : (
                         <>
                           <div className={styles.msIcon} aria-hidden="true">
-                            <span className={styles.logo}>
-                              <Image src="/vercel.svg" alt="Vercel Logo" width={72} height={16} />
-                            </span>
+                            <span className={styles.msRed} />
+                            <span className={styles.msGreen} />
                             <span className={styles.msBlue} />
                             <span className={styles.msYellow} />
                           </div>
