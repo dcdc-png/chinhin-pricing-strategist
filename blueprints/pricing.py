@@ -84,7 +84,7 @@ def _get_openai_client():
         return AzureOpenAI(
             azure_endpoint=cfg["PROJECT_ENDPOINT"],
             api_key=cfg["PROJECT_KEY"],
-            api_version="2024-05-01-preview"
+            api_version="2024-05-01"
         )
     else:
         logging.info("Using AIProjectClient with DefaultAzureCredential")
@@ -144,15 +144,23 @@ def diagnostics(req: func.HttpRequest) -> func.HttpResponse:
         "EXCEL_PATH"
     ]
 
+    # Check for keys but don't leak them
+    key_val = os.getenv("AZURE_AI_PROJECT_KEY", "")
+    if len(key_val) > 8:
+        masked_key = f"{key_val[:4]}...{key_val[-4:]}"
+    elif key_val:
+        masked_key = "Present"
+    else:
+        masked_key = "Missing"
+
     diag_data = {
         "cwd": os.getcwd(),
         "sys_path": sys.path,
         "python_version": sys.version,
         "files_in_root": os.listdir("."),
-        "has_dot_pkg": os.path.exists(".python_packages"),
         "has_pkg": os.path.exists("python_packages"),
         "pandas_import": pandas_status,
-        "excel_path_abs": os.path.abspath(cfg["EXCEL_PATH"]),
+        "project_key_detected": masked_key,
         "excel_exists": os.path.exists(os.path.abspath(cfg["EXCEL_PATH"])),
         "env_keys_present": [k for k in expected_env_vars if os.getenv(k)],
         "missing_env_vars": [k for k in expected_env_vars if not os.getenv(k)],
