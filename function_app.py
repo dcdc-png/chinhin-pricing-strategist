@@ -8,9 +8,9 @@ import os
 import sys
 import azure.functions as func
 
-# Ensure local dependencies in .python_packages are in the path
-# This is required for "No Build" deployments where we bundle our own libs
-site_packages = os.path.join(os.getcwd(), ".python_packages", "lib", "site-packages")
+# Ensure local dependencies in python_packages are in the path
+# We removed the dot to ensure it's not hidden/excluded from the zip
+site_packages = os.path.join(os.getcwd(), "python_packages", "lib", "site-packages")
 if os.path.exists(site_packages) and site_packages not in sys.path:
     sys.path.insert(0, site_packages)
 

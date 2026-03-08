@@ -123,9 +123,9 @@ def diagnostics(req: func.HttpRequest) -> func.HttpResponse:
     if req.method == "OPTIONS":
         return _cors_preflight()
     
+    import sys
     cfg = get_config()
     
-    # Try importing pandas lazily
     pandas_status = "Not checked"
     try:
         import pandas as pd
@@ -133,7 +133,6 @@ def diagnostics(req: func.HttpRequest) -> func.HttpResponse:
     except Exception as e:
         pandas_status = f"Failed: {str(e)}"
 
-    # Actual environment variable names we expect
     expected_env_vars = [
         "PROJECT_ENDPOINT",
         "AZURE_AI_PROJECT_KEY",
@@ -145,7 +144,11 @@ def diagnostics(req: func.HttpRequest) -> func.HttpResponse:
 
     diag_data = {
         "cwd": os.getcwd(),
+        "sys_path": sys.path,
+        "python_version": sys.version,
         "files_in_root": os.listdir("."),
+        "has_dot_pkg": os.path.exists(".python_packages"),
+        "has_pkg": os.path.exists("python_packages"),
         "pandas_import": pandas_status,
         "excel_path_abs": os.path.abspath(cfg["EXCEL_PATH"]),
         "excel_exists": os.path.exists(os.path.abspath(cfg["EXCEL_PATH"])),

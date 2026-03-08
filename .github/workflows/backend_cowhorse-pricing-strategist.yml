@@ -33,16 +33,15 @@ jobs:
         shell: bash
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt --target=".python_packages/lib/site-packages"
+          pip install -r requirements.txt --target="python_packages/lib/site-packages"
 
       - name: Prepare build artifact
         shell: bash
         run: |
           mkdir build_output
           # Use rsync to copy everything except the large frontend folder and git noise
-          rsync -av . build_output/ --exclude frontend --exclude .git --exclude .github --exclude .venv --exclude node_modules --exclude out --exclude build_output --exclude ".python_packages" # Exclude source dot-pkg
-          # Re-copy the local packages we just installed
-          cp -r .python_packages build_output/
+          # We explicitly INCLUDE python_packages by not excluding it
+          rsync -av . build_output/ --exclude frontend --exclude .git --exclude .github --exclude .venv --exclude node_modules --exclude out --exclude build_output
           ls -R build_output
 
       - name: Upload artifact for deployment job
