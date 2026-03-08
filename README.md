@@ -3,6 +3,7 @@
 Welcome to the **Fiamma AI Pricing Strategist**, an intelligent decision-support tool designed to replace manual guesswork with data-driven pricing recommendations. This tool empowers sales managers to maximize profit margins, balance competitiveness, and optimize stock levels across all sales channels.
 
 **Web APP:** https://green-dune-0c54f0e10.2.azurestaticapps.net/
+**Challenge 9: Video Demo:** https://drive.google.com/drive/folders/1JlMNmcbt-FT_4eGmE7nfPHqVxtKSyeKa
 
 ---
 
@@ -26,11 +27,8 @@ The core of the application is the **Pricing Dashboard**, where you can simulate
 Here is a step-by-step workflow when a new order request comes in:
 
 ### Step 1: Input Deal Parameters (Margin Simulator)
-Use the **AI Strategy Inputs** panel to define the unique context of the current deal. The AI will immediately recalculate its recommendations based on these adjustments:
-* **Target Margin (%)**: Use the slider to set your desired gross margin floor.
-* **Order Volume**: Enter the quantity of units requested by the dealer.
-* **Strategic Goal**: Select the overarching goal for this transaction from the dropdown (e.g., *Maximize Profit*, *Move Volume / Clear Stock*, or *Match Competitor*).
-* **Customer Tier**: Indicate the relationship with the dealer (e.g., *Standard*, *Loyalty / VIP*, or *New Acquisition*).
+* **Customer** — A dropdown labelled "Select customer...". Choose the dealer or customer account for whom you are preparing the pricing quote.
+• **Item** — A dropdown labelled "Select item...". Choose the specific product SKU or item you wish to price.
 
 ### Step 2: Review the AI Rationale
 Scroll down to the **AI Pricing Rationale** panel to see the exact price recommended by the engine. The AI provides a "Smart Why" rationale, breaking down the factors that influenced the decision. 
