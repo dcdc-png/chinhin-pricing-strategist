@@ -375,6 +375,7 @@ Rules:
             full_text = ""
 
             with client.responses.stream(
+                model=cfg["AGENT_MODEL"],
                 input=[{"role": "user", "content": prompt}],
                 extra_body={
                     "agent": {
@@ -496,6 +497,7 @@ def chat(req: func.HttpRequest) -> func.HttpResponse:
             full_text = ""
 
             with client.responses.stream(
+                model=cfg["AGENT_MODEL"],
                 input=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user",   "content": message},
