@@ -98,15 +98,14 @@ def _get_project_client():
         raise RuntimeError("PROJECT_ENDPOINT is not configured.")
     
     if cfg["PROJECT_KEY"]:
-        logging.info("Using AIProjectClient with ApiKeyPolicy injection")
-        # Initialize with dummy token to avoid attribute errors, then inject key policy
-        client = AIProjectClient(
+        logging.info("Using AIProjectClient with ApiKeyPolicy via constructor")
+        # Use DummyTokenCredential to satisfy the SDK's internal requirement for a token-based flow,
+        # but our policy will replace the Authorization header with the actual api-key.
+        return AIProjectClient(
             endpoint=cfg["PROJECT_ENDPOINT"],
             credential=DummyTokenCredential(),
+            per_call_policies=[ApiKeyPolicy(cfg["PROJECT_KEY"])]
         )
-        # Inject the policy at the start of the pipeline
-        client._client._pipeline._policies.insert(0, ApiKeyPolicy(cfg["PROJECT_KEY"]))
-        return client
     else:
         logging.info("Using AIProjectClient with DefaultAzureCredential")
         return AIProjectClient(
