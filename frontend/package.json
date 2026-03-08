@@ -1,0 +1,30 @@
+{
+  "name": "nextjs-static-website",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "next build && next export",
+    "dev": "next dev",
+    "dev:local": "concurrently --kill-others \"next dev\" \"swa start http://localhost:3000\"",
+    "fix": "next lint --fix",
+    "lint": "next lint",
+    "start": "next start"
+  },
+  "dependencies": {
+    "isomorphic-unfetch": "^3.0.0",
+    "next": "^12.1.6",
+    "react": "^17.0.2",
+    "react-dom": "^17.0.2",
+    "recharts": "^2.15.4"
+  },
+  "devDependencies": {
+    "@azure/static-web-apps-cli": "^2.0.2",
+    "concurrently": "^9.2.1",
+    "eslint": "^8.11.0",
+    "eslint-config-next": "^12.1.0",
+    "eslint-config-prettier": "^8.5.0",
+    "eslint-plugin-prettier": "^4.0.0",
+    "prettier": "^2.6.0",
+    "serve": "^13.0.2"
+  }
+}

@@ -1,0 +1,18 @@
+/* ─────────────────────────────────────────
+   Global styles — shared across all pages
+   ───────────────────────────────────────── */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100vh;
+}
+
+body {
+  font-family: 'Inter', 'PT Sans', sans-serif;
+  background-color: #111111;
+  color: #ffffff;
+}

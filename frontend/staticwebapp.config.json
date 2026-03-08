@@ -1,0 +1,22 @@
+{
+  "navigationFallback": {
+    "rewrite": "index.html",
+    "exclude": ["*.{png,jpg,gif,svg}", "*.css"]
+  },
+  "routes": [
+    {
+      "route": "/dashboard",
+      "allowedRoles": ["authenticated"]
+    },
+    {
+      "route": "/dashboard/*",
+      "allowedRoles": ["authenticated"]
+    }
+  ],
+  "responseOverrides": {
+    "401": {
+      "redirect": "/",
+      "statusCode": 302
+    }
+  }
+}
