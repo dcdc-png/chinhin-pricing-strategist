@@ -201,8 +201,9 @@ export default function LoginPage() {
                         <>
                           <div className={styles.msIcon} aria-hidden="true">
                             <span className={styles.logo}>
-            <img src="/vercel.svg" alt="Vercel Logo" width={72} height={16} />
-          </span>                  <span className={styles.msBlue} />
+                              <Image src="/vercel.svg" alt="Vercel Logo" width={72} height={16} />
+                            </span>
+                            <span className={styles.msBlue} />
                             <span className={styles.msYellow} />
                           </div>
                           Sign in with Microsoft
