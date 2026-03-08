@@ -118,23 +118,39 @@ def _cors_preflight() -> func.HttpResponse:
     )
 
 
-# ===========================================================================
-# GET /api/diag — Diagnostics
-# ===========================================================================
 @bp.route(route="diag", methods=["GET", "OPTIONS"])
 def diagnostics(req: func.HttpRequest) -> func.HttpResponse:
     if req.method == "OPTIONS":
         return _cors_preflight()
     
     cfg = get_config()
+    
+    # Try importing pandas lazily
+    pandas_status = "Not checked"
+    try:
+        import pandas as pd
+        pandas_status = f"Success (v{pd.__version__})"
+    except Exception as e:
+        pandas_status = f"Failed: {str(e)}"
+
+    # Actual environment variable names we expect
+    expected_env_vars = [
+        "PROJECT_ENDPOINT",
+        "AZURE_AI_PROJECT_KEY",
+        "AZURE_AI_AGENT_NAME",
+        "AZURE_AI_AGENT_VERSION",
+        "AZURE_AI_AGENT_MODEL",
+        "EXCEL_PATH"
+    ]
+
     diag_data = {
         "cwd": os.getcwd(),
         "files_in_root": os.listdir("."),
-        "excel_path_env": cfg["EXCEL_PATH"],
+        "pandas_import": pandas_status,
         "excel_path_abs": os.path.abspath(cfg["EXCEL_PATH"]),
         "excel_exists": os.path.exists(os.path.abspath(cfg["EXCEL_PATH"])),
-        "env_keys_present": [k for k in cfg.keys() if os.getenv(k)],
-        "missing_keys": [k for k in cfg.keys() if not os.getenv(k)],
+        "env_keys_present": [k for k in expected_env_vars if os.getenv(k)],
+        "missing_env_vars": [k for k in expected_env_vars if not os.getenv(k)],
     }
     return func.HttpResponse(
         json.dumps(diag_data, indent=2),
