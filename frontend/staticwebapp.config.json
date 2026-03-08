@@ -1,9 +1,13 @@
 {
   "navigationFallback": {
     "rewrite": "index.html",
-    "exclude": ["*.{png,jpg,gif,svg}", "*.css"]
+    "exclude": ["*.{png,jpg,gif,svg,ico}", "*.css", "*.js", "/api/*"]
   },
   "routes": [
+    {
+      "route": "/api/*",
+      "allowedRoles": ["anonymous"]
+    },
     {
       "route": "/dashboard",
       "allowedRoles": ["authenticated"]
@@ -18,5 +22,8 @@
       "redirect": "/",
       "statusCode": 302
     }
+  },
+  "globalHeaders": {
+    "Cache-Control": "no-store"
   }
-}
+}

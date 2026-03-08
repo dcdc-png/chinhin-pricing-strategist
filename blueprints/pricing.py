@@ -1,85 +1,435 @@
-import azure.functions as func
-import asyncio
-import threading
+"""
+blueprints/pricing.py
+Azure Functions v2 Blueprint — Foundry Pricing API
+Routes: /api/customers, /api/items, /api/pricing, /api/chat
+"""
+import os
 import json
+import asyncio
+import logging
+import threading
+
+import azure.functions as func
 import pandas as pd
-from shared.data import get_db
-from shared.ai import get_openai_client
-from shared.config import AGENT_MODEL, AGENT_NAME, AGENT_VERSION
+from azure.ai.projects import AIProjectClient
+from azure.identity import DefaultAzureCredential
 
 bp = func.Blueprint()
 
-@bp.route(route="pricing", methods=["POST"])
-async def pricing_analysis(req: func.HttpRequest) -> func.HttpResponse:
-    _db = get_db()
+# ---------------------------------------------------------------------------
+# Config (from Application Settings / local.settings.json)
+# ---------------------------------------------------------------------------
+PROJECT_ENDPOINT = os.getenv("PROJECT_ENDPOINT", "")
+AGENT_NAME       = os.getenv("AZURE_AI_AGENT_NAME", "AI-Pricing-Strategist")
+AGENT_VERSION    = os.getenv("AZURE_AI_AGENT_VERSION", "3")
+AGENT_MODEL      = os.getenv("AZURE_AI_AGENT_MODEL", "gpt-4.1-nano")
+EXCEL_PATH       = os.getenv("EXCEL_PATH", "data.xlsx")
+
+# ---------------------------------------------------------------------------
+# Excel DB (loaded once at cold-start via module import in function_app.py)
+# ---------------------------------------------------------------------------
+_db: dict = {}
+
+
+def load_excel():
+    global _db
+    if not os.path.exists(EXCEL_PATH):
+        logging.warning("Excel file not found at '%s'.", EXCEL_PATH)
+        return
+    xl = pd.ExcelFile(EXCEL_PATH)
+    _db["price"]      = xl.parse("Price Sheet")
+    _db["sales"]      = xl.parse("Sales History")
+    _db["competitor"] = xl.parse("Competitor Pricing")
+    _db["crm"]        = xl.parse("CRM Sheet")
+    for key in _db:
+        _db[key].columns = _db[key].columns.str.strip()
+    logging.info("Loaded Excel from '%s'.", EXCEL_PATH)
+
+
+# ---------------------------------------------------------------------------
+# OpenAI client helper
+# ---------------------------------------------------------------------------
+def _get_openai_client():
+    if not PROJECT_ENDPOINT:
+        raise RuntimeError("PROJECT_ENDPOINT is not configured.")
+    return AIProjectClient(
+        endpoint=PROJECT_ENDPOINT,
+        credential=DefaultAzureCredential(),
+    ).get_openai_client()
+
+
+# ---------------------------------------------------------------------------
+# Helper: SSE header dict
+# ---------------------------------------------------------------------------
+def _sse_headers() -> dict:
+    return {
+        "Content-Type": "text/event-stream; charset=utf-8",
+        "Cache-Control": "no-cache",
+        "X-Accel-Buffering": "no",
+        "Access-Control-Allow-Origin": "*",
+    }
+
+
+# ---------------------------------------------------------------------------
+# CORS preflight helper
+# ---------------------------------------------------------------------------
+def _cors_preflight() -> func.HttpResponse:
+    return func.HttpResponse(
+        status_code=204,
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type",
+        },
+    )
+
+
+# ===========================================================================
+# GET /api/customers
+# ===========================================================================
+@bp.route(route="customers", methods=["GET", "OPTIONS"])
+def get_customers(req: func.HttpRequest) -> func.HttpResponse:
+    if req.method == "OPTIONS":
+        return _cors_preflight()
+
+    if "crm" not in _db:
+        return func.HttpResponse(
+            json.dumps({"error": "Excel not loaded"}),
+            status_code=503,
+            mimetype="application/json",
+        )
+    crm = _db["crm"]
+    customers = (
+        crm[["Customer ID", "Customer Name"]]
+        .drop_duplicates()
+        .sort_values("Customer Name")
+        .to_dict(orient="records")
+    )
+    return func.HttpResponse(
+        json.dumps(customers, default=str),
+        mimetype="application/json",
+        headers={"Access-Control-Allow-Origin": "*"},
+    )
+
+
+# ===========================================================================
+# GET /api/items
+# ===========================================================================
+@bp.route(route="items", methods=["GET", "OPTIONS"])
+def get_items(req: func.HttpRequest) -> func.HttpResponse:
+    if req.method == "OPTIONS":
+        return _cors_preflight()
+
+    if "price" not in _db:
+        return func.HttpResponse(
+            json.dumps({"error": "Excel not loaded"}),
+            status_code=503,
+            mimetype="application/json",
+        )
+    price = _db["price"]
+    items = (
+        price[["Item Code", "Item Name", "Category"]]
+        .drop_duplicates()
+        .sort_values("Item Name")
+        .to_dict(orient="records")
+    )
+    return func.HttpResponse(
+        json.dumps(items, default=str),
+        mimetype="application/json",
+        headers={"Access-Control-Allow-Origin": "*"},
+    )
+
+
+# ===========================================================================
+# POST /api/pricing  — SSE stream
+# ===========================================================================
+@bp.route(route="pricing", methods=["POST", "OPTIONS"])
+def pricing_analysis(req: func.HttpRequest) -> func.HttpResponse:
+    if req.method == "OPTIONS":
+        return _cors_preflight()
+
     if not _db:
-        return func.HttpResponse("Excel not loaded", status_code=503)
+        return func.HttpResponse(
+            json.dumps({"error": "Excel not loaded"}),
+            status_code=503,
+            mimetype="application/json",
+        )
 
     try:
-        req_body = req.get_json()
-        customer_id = req_body.get("customer_id")
-        item_code = req_body.get("item_code")
+        body = req.get_json()
     except ValueError:
-        return func.HttpResponse("Invalid JSON body", status_code=400)
+        return func.HttpResponse(
+            json.dumps({"error": "Invalid JSON body"}),
+            status_code=400,
+            mimetype="application/json",
+        )
 
-    # ---- Data Gathering (same logic as your FastAPI version) ----
-    crm = _db["crm"]
+    customer_id = body.get("customer_id", "")
+    item_code   = body.get("item_code", "")
+
+    if not customer_id or not item_code:
+        return func.HttpResponse(
+            json.dumps({"error": "customer_id and item_code are required"}),
+            status_code=400,
+            mimetype="application/json",
+        )
+
+    crm      = _db["crm"]
     price_df = _db["price"]
     sales_df = _db["sales"]
-    comp_df = _db["competitor"]
+    comp_df  = _db["competitor"]
 
     customer_row = crm[crm["Customer ID"] == customer_id]
-    item_row = price_df[price_df["Item Code"] == item_code]
-    comp_row = comp_df[comp_df["Item Code"] == item_code]
+    item_row     = price_df[price_df["Item Code"] == item_code]
 
-    if customer_row.empty or item_row.empty:
-        return func.HttpResponse("Customer or Item not found", status_code=404)
+    if customer_row.empty:
+        return func.HttpResponse(
+            json.dumps({"error": f"Customer '{customer_id}' not found"}),
+            status_code=404,
+            mimetype="application/json",
+        )
+    if item_row.empty:
+        return func.HttpResponse(
+            json.dumps({"error": f"Item '{item_code}' not found"}),
+            status_code=404,
+            mimetype="application/json",
+        )
 
     customer = customer_row.iloc[0].to_dict()
-    item = item_row.iloc[0].to_dict()
-    comp = comp_row.iloc[0].to_dict() if not comp_row.empty else {}
+    item     = item_row.iloc[0].to_dict()
+    comp_row = comp_df[comp_df["Item Code"] == item_code]
+    comp     = comp_row.iloc[0].to_dict() if not comp_row.empty else {}
 
-    history = sales_df[(sales_df["Customer ID"] == customer_id) & (sales_df["Item Code"] == item_code)].sort_values("Date")
-    history_records = history[["Date", "Qty Ordered", "Unit Price Given (RM)", "List Price (RM)", "Discount %", "Total Value (RM)"]].to_dict(orient="records")
+    history = sales_df[
+        (sales_df["Customer ID"] == customer_id) &
+        (sales_df["Item Code"]   == item_code)
+    ].sort_values("Date")
 
-    actual_points = [{"qty": float(r["Qty Ordered"]), "price": float(r["Unit Price Given (RM)"])} for r in history_records if pd.notna(r["Qty Ordered"]) and pd.notna(r["Unit Price Given (RM)"])]
+    history_records = history[
+        ["Date", "Qty Ordered", "Unit Price Given (RM)", "List Price (RM)", "Discount %", "Total Value (RM)"]
+    ].to_dict(orient="records")
 
-    list_price = float(item.get("List Price (RM)", 0))
-    market_low = float(comp.get("Market Low (RM)", list_price * 0.80)) if comp else list_price * 0.80
-    market_high = float(comp.get("Market High (RM)", list_price)) if comp else list_price
+    actual_points = [
+        {"qty": float(r["Qty Ordered"]), "price": float(r["Unit Price Given (RM)"])}
+        for r in history_records
+        if pd.notna(r["Qty Ordered"]) and pd.notna(r["Unit Price Given (RM)"])
+    ]
 
-    prompt = f"..." # (Use the exact prompt string from your original code)
+    list_price  = float(item.get("List Price (RM)", 0))
+    market_low  = float(comp.get("Market Low (RM)",  list_price * 0.80)) if comp else list_price * 0.80
+    market_high = float(comp.get("Market High (RM)", list_price))        if comp else list_price
 
-    async def event_stream():
-        loop = asyncio.get_event_loop()
-        queue = asyncio.Queue()
+    prompt = f\"\"\"
+You are a pricing strategist. Analyze the following data and return a JSON object (and ONLY a JSON object, no markdown, no explanation) with this exact structure:
 
-        def run_agent():
-            try:
-                client = get_openai_client()
-                full_text = ""
-                with client.responses.stream(
-                    model=AGENT_MODEL,
-                    input=[{"role": "user", "content": prompt}],
-                    extra_body={"agent_reference": {"name": AGENT_NAME, "version": AGENT_VERSION, "type": "agent_reference"}},
-                ) as stream:
-                    for event in stream:
-                        # ... (Streaming parsing logic exactly as you have it)
-                        pass 
+{{
+  "optimal_price_points": [
+    {{"qty": <number>, "price": <number>}},
+    ...
+  ],
+  "min_price": <number>,
+  "recommended_price": <number>,
+  "reasoning": "<2–3 sentence plain English explanation>",
+  "discount_ceiling": <number>
+}}
 
-                # Result construction logic...
-                result = {"type": "result", "data": {}} # Simplified for brevity, use your full merge logic
-                loop.call_soon_threadsafe(queue.put_nowait, f"data: {json.dumps(result)}\n\n")
-            except Exception as e:
-                loop.call_soon_threadsafe(queue.put_nowait, f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n")
-            finally:
-                loop.call_soon_threadsafe(queue.put_nowait, None)
+CUSTOMER PROFILE:
+{json.dumps(customer, default=str, indent=2)}
 
-        threading.Thread(target=run_agent, daemon=True).start()
+ITEM DETAILS:
+{json.dumps(item, default=str, indent=2)}
 
-        while True:
-            chunk = await queue.get()
-            if chunk is None: break
-            yield chunk
+COMPETITOR PRICING:
+{json.dumps(comp, default=str, indent=2)}
 
-    return func.HttpResponse(event_stream(), mimetype="text/event-stream")
+SALES HISTORY (this customer × this item, chronological):
+{json.dumps(history_records, default=str, indent=2)}
+
+Rules:
+- min_price must be >= market_low and must preserve at least 10% margin
+- optimal_price_points should show how price decreases as qty increases (volume discount curve, 5–8 points)
+- factor in the customer's Loyalty Tier, Price Sensitivity, and Avg Discount Requested %
+- recommended_price is the best single price for a typical order from this customer
+- Respond with ONLY the JSON object, no code fences, no extra text.
+\"\"\"
+
+    # Run agent synchronously in a thread and collect SSE output
+    result_chunks: list[str] = []
+    error_chunks: list[str]  = []
+    done_event = threading.Event()
+
+    def run_agent():
+        try:
+            client    = _get_openai_client()
+            full_text = ""
+
+            with client.responses.stream(
+                model=AGENT_MODEL,
+                input=[{"role": "user", "content": prompt}],
+                extra_body={
+                    "agent_reference": {
+                        "name": AGENT_NAME,
+                        "version": AGENT_VERSION,
+                        "type": "agent_reference",
+                    }
+                },
+            ) as stream:
+                for event in stream:
+                    event_type = getattr(event, "type", None)
+                    if event_type == "response.output_text.delta":
+                        delta = getattr(event, "delta", None)
+                        if delta:
+                            full_text += delta
+                    elif event_type and "delta" in event_type:
+                        delta = getattr(event, "delta", None)
+                        if isinstance(delta, str) and delta:
+                            full_text += delta
+                        elif delta:
+                            text = getattr(delta, "text", None) or getattr(delta, "content", None)
+                            if text:
+                                full_text += text
+
+            clean      = full_text.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
+            agent_data = json.loads(clean)
+
+            result = {
+                "actual_points":         actual_points,
+                "list_price":            list_price,
+                "market_low":            market_low,
+                "market_high":           market_high,
+                "min_price":             agent_data.get("min_price", market_low),
+                "recommended_price":     agent_data.get("recommended_price", list_price),
+                "optimal_price_points":  agent_data.get("optimal_price_points", []),
+                "discount_ceiling":      agent_data.get("discount_ceiling", 0),
+                "reasoning":             agent_data.get("reasoning", ""),
+                "customer_name":         customer.get("Customer Name", ""),
+                "item_name":             item.get("Item Name", ""),
+                "loyalty_tier":          customer.get("Loyalty Tier", ""),
+                "price_sensitivity":     customer.get("Price Sensitivity", ""),
+            }
+            result_chunks.append(f"data: {json.dumps({'type': 'result', 'data': result})}\n\n")
+
+        except json.JSONDecodeError as exc:
+            error_chunks.append(
+                f"data: {json.dumps({'type': 'error', 'message': f'Agent returned invalid JSON: {exc}'})}\n\n"
+            )
+        except Exception as exc:
+            error_chunks.append(
+                f"data: {json.dumps({'type': 'error', 'message': str(exc)})}\n\n"
+            )
+        finally:
+            done_event.set()
+
+    t = threading.Thread(target=run_agent, daemon=True)
+    t.start()
+    done_event.wait(timeout=120)  # 2-min hard timeout
+
+    body_text = result_chunks[0] if result_chunks else (
+        error_chunks[0] if error_chunks else
+        f"data: {json.dumps({'type': 'error', 'message': 'Agent timed out or returned no data'})}\n\n"
+    )
+
+    return func.HttpResponse(
+        body_text,
+        status_code=200,
+        headers=_sse_headers(),
+    )
+
+
+# ===========================================================================
+# POST /api/chat  — SSE stream (free-text conversation with Foundry agent)
+# ===========================================================================
+@bp.route(route="chat", methods=["POST", "OPTIONS"])
+def chat(req: func.HttpRequest) -> func.HttpResponse:
+    if req.method == "OPTIONS":
+        return _cors_preflight()
+
+    try:
+        body = req.get_json()
+    except ValueError:
+        return func.HttpResponse(
+            json.dumps({"error": "Invalid JSON body"}),
+            status_code=400,
+            mimetype="application/json",
+        )
+
+    message        = body.get("message", "").strip()
+    context_blurb  = body.get("context", "")   # optional context (customer, item, pricing result)
+
+    if not message:
+        return func.HttpResponse(
+            json.dumps({"error": "message is required"}),
+            status_code=400,
+            mimetype="application/json",
+        )
+
+    system_prompt = (
+        "You are Fiamma's AI Pricing Strategist. You help sales managers make smart pricing decisions "
+        "for hardware products. Answer concisely and practically. Use Malaysian Ringgit (RM) for prices."
+    )
+    if context_blurb:
+        system_prompt += f"\n\nCurrent pricing context:\n{context_blurb}"
+
+    # Run agent, collect full reply, send back in one SSE chunk
+    reply_chunks: list[str] = []
+    error_chunks: list[str] = []
+    done_event = threading.Event()
+
+    def run_chat():
+        try:
+            client    = _get_openai_client()
+            full_text = ""
+
+            with client.responses.stream(
+                model=AGENT_MODEL,
+                input=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user",   "content": message},
+                ],
+                extra_body={
+                    "agent_reference": {
+                        "name": AGENT_NAME,
+                        "version": AGENT_VERSION,
+                        "type": "agent_reference",
+                    }
+                },
+            ) as stream:
+                for event in stream:
+                    event_type = getattr(event, "type", None)
+                    if event_type == "response.output_text.delta":
+                        delta = getattr(event, "delta", None)
+                        if delta:
+                            full_text += delta
+                    elif event_type and "delta" in event_type:
+                        delta = getattr(event, "delta", None)
+                        if isinstance(delta, str) and delta:
+                            full_text += delta
+                        elif delta:
+                            text = getattr(delta, "text", None) or getattr(delta, "content", None)
+                            if text:
+                                full_text += text
+
+            reply_chunks.append(
+                f"data: {json.dumps({'type': 'message', 'text': full_text.strip()})}\n\n"
+            )
+        except Exception as exc:
+            error_chunks.append(
+                f"data: {json.dumps({'type': 'error', 'message': str(exc)})}\n\n"
+            )
+        finally:
+            done_event.set()
+
+    t = threading.Thread(target=run_chat, daemon=True)
+    t.start()
+    done_event.wait(timeout=60)
+
+    body_text = reply_chunks[0] if reply_chunks else (
+        error_chunks[0] if error_chunks else
+        f"data: {json.dumps({'type': 'error', 'message': 'Agent timed out'})}\n\n"
+    )
+
+    return func.HttpResponse(
+        body_text,
+        status_code=200,
+        headers=_sse_headers(),
+    )

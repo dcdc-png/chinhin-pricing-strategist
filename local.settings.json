@@ -1,7 +1,12 @@
 {
-    "IsEncrypted": false,
-    "Values": {
-        "AzureWebJobsStorage": "UseDevelopmentStorage=true",
-        "FUNCTIONS_WORKER_RUNTIME": "python"
-    }
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "FUNCTIONS_WORKER_RUNTIME": "python",
+    "PROJECT_ENDPOINT": "https://cow-horse-test.services.ai.azure.com/api/projects/test",
+    "AZURE_AI_AGENT_NAME": "AI-Pricing-Strategist",
+    "AZURE_AI_AGENT_VERSION": "3",
+    "AZURE_AI_AGENT_MODEL": "gpt-4.1-nano",
+    "EXCEL_PATH": "data.xlsx"
+  }
 }
