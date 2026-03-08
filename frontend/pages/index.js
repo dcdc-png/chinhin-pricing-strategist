@@ -1,6 +1,5 @@
 import Head from 'next/head';
-
-import { useEffect, useState, useRef, useCallback } from 'react';
+import Image from 'next/image';import { useEffect, useState, useRef, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import styles from '../styles/login.module.css';
 import { getUser, signIn, isLocalDev } from '../utils/auth';
