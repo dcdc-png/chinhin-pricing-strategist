@@ -1,65 +1,148 @@
-# Next.js Starter (Static Sites)
+# Foundry Pricing Backend (Azure Functions)
 
-[Azure Static Web Apps](https://docs.microsoft.com/azure/static-web-apps/overview) allows you to easily build [Next.js](https://nextjs.org/) apps in minutes. Use this repo with the [Azure Static Web Apps Next.js tutorial](https://learn.microsoft.com/azure/static-web-apps/deploy-nextjs-static-export?tabs=github-actions) to build and customize a new static site.
+An **Azure Functions** backend that connects an **Azure AI Foundry** agent to an Excel-based pricing database, serving data for an interactive price-vs-quantity analysis chart.
 
+---
 
+## What It Does
 
-## Running locally
+Select a customer and an item in the frontend. The backend pulls together that customer's CRM profile, the item's price and stock data, competitor pricing, and the full sales history between that customer and item. It sends all of this as context to your **AI-Pricing-Strategist** agent on Azure AI Foundry, which streams back:
 
-To run locally, open the development server with the following command:
+- A recommended price for that customer
+- A minimum price floor (preserving margin)
+- A volume discount curve (optimal price at each quantity bracket)
+- A plain-English reasoning summary
+
+---
+
+## Project Structure
+
+```text
+.
+├── function_app.py        # Azure Functions entry point
+├── blueprints/            # Route groups (health, pricing, data_endpoints)
+├── shared/                # Shared utilities and configurations
+├── requirements.txt       # Python dependencies
+├── local.settings.json    # Local environment variables
+└── data.xlsx              # Your Excel database
+```
+
+---
+
+## Prerequisites
+
+- Python 3.10+ or 3.11+
+- [Azure Functions Core Tools](https://learn.microsoft.com/en-us/azure/azure-functions/functions-run-local)
+- An [Azure AI Foundry](https://ai.azure.com) project with an agent named `AI-Pricing-Strategist`
+- Azure CLI installed and logged in (`az login`) for local `DefaultAzureCredential` auth
+- Your pricing Excel file (`data.xlsx`)
+
+---
+
+## Setup & Local Development
+
+**1. Create and activate a virtual environment:**
 
 ```bash
-npm run dev
+python -m venv .venv
+
+# Windows
+.venv\Scripts\activate
+
+# macOS / Linux
+source .venv/bin/activate
 ```
 
-Next, open [http://localhost:3000](http://localhost:3000) in your browser to see the result.
+**2. Install dependencies:**
 
-For a more rich local development experience, refer to [Set up local development for Azure Static Web Apps](https://docs.microsoft.com/azure/static-web-apps/local-development).
-
-## How it works
-
-This starter application is configured to build a static site with dynamic routes. 
-
-### Dynamic routes
-
-The *pages/project/[slug].js* file implements code that tells Next.js what pages to generate based on associated data. In Next.js, each page powered by dynamic routes needs to implement `getStaticPaths` and `getStaticProps` to give Next.js the information it needs to build pages that match possible route values.
-
-Inside `getStaticPaths`, each data object is used to create a list of paths all possible pages.
-
-```javascript
-export async function getStaticPaths() {
-  const paths = projects.map((project) => ({
-    params: { path: project.slug },
-  }))
-  return { paths, fallback: false };
-}
+```bash
+pip install -r requirements.txt
 ```
-The `getStaticProps` function is run each time a page is generated. Based off the parameter values, the function matches the full data object to the page being generated. Once the data object is returned, it is used as the context for the generated page.
 
-```javascript
-export async function getStaticProps({ params }) {
-  const project = projects.find(proj => proj.slug === params.path);
-  return { props: { project } };
-}
-```
-### Application configuration
-
-The `next.config.js` file is set up to enforce trailing slashes on all page.
-
-```javascript
-module.exports = {
-    trailingSlash: true
-};
-```
-### Build scripts
-
-The npm `build` script runs commands to not only build the application, but also generate all the static files to the `out` folder.
+**3. Configure `local.settings.json`:**
+Add your secrets to the `Values` dictionary in `local.settings.json` (do not commit this file):
 
 ```json
-"scripts": {
-  "dev": "next dev",
-  "build": "next build && next export",
-},
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "FUNCTIONS_WORKER_RUNTIME": "python",
+    "PROJECT_ENDPOINT": "https://<resource-name>.services.ai.azure.com/api/projects/<project-name>",
+    "AZURE_AI_AGENT_NAME": "AI-Pricing-Strategist",
+    "AZURE_AI_AGENT_VERSION": "3",
+    "AZURE_AI_AGENT_MODEL": "gpt-4.1-nano"
+  }
+}
 ```
 
-> **Note:** If you use the [Azure Static Web Apps CLI](https://docs.microsoft.com/azure/static-web-apps/local-development), copy the *staticwebapp.config.json* file to the *out* folder, and start the CLI from the *out* folder.
+**4. Start the Azure Functions local server:**
+
+```bash
+func start
+```
+
+Your functions will be available at `http://localhost:7071`.
+
+---
+
+## API Reference
+
+Azure Functions automatically prefixes HTTP routes with `/api/`.
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/health` | Health check to verify the function app is running |
+| `GET` | `/api/customers` | List all unique customers from the CRM sheet |
+| `GET` | `/api/items` | List all available items from the Price Sheet |
+| `POST` | `/api/pricing` | Run AI pricing analysis (Server-Sent Events stream) |
+| `GET` | `/api/debug/columns` | Returns actual column names from all sheets |
+
+---
+
+### Example Usage
+
+#### 1. Get Customers
+Retrieve a list of all customers to populate a dropdown.
+```bash
+curl http://localhost:7071/api/customers
+```
+
+#### 2. Get Items
+Retrieve a list of all products.
+```bash
+curl http://localhost:7071/api/items
+```
+
+#### 3. Run Pricing Analysis (`POST /api/pricing`)
+Request a pricing analysis for a specific customer and item. 
+
+**Request body:**
+```json
+{
+  "customer_id": "C001",
+  "item_code": "ITM-042"
+}
+```
+
+**cURL Example:**
+```bash
+curl -X POST http://localhost:7071/api/pricing \
+     -H "Content-Type: application/json" \
+     -d '{"customer_id": "C001", "item_code": "ITM-042"}'
+```
+
+**Response:** 
+The endpoint streams back Server-Sent Events (SSE). It yields streaming chunks until it outputs the final `result` JSON event:
+
+```json
+data: {"type": "result", "data": {"customer_name": "...", "recommended_price": 94.50, ...}}
+```
+
+---
+
+## Authentication
+
+Authentication to Azure AI Foundry uses `DefaultAzureCredential` from the Azure Identity SDK. 
+- **Locally:** It picks up your `az login` session automatically. 
+- **In Azure:** Assign a **managed identity** to the Function App and grant it the **Azure AI Developer** role on your Foundry project.
