@@ -161,6 +161,8 @@ def diagnostics(req: func.HttpRequest) -> func.HttpResponse:
         "has_pkg": os.path.exists("python_packages"),
         "pandas_import": pandas_status,
         "project_key_detected": masked_key,
+        "model_name": cfg["AGENT_MODEL"],
+        "endpoint": cfg["PROJECT_ENDPOINT"],
         "excel_exists": os.path.exists(os.path.abspath(cfg["EXCEL_PATH"])),
         "env_keys_present": [k for k in expected_env_vars if os.getenv(k)],
         "missing_env_vars": [k for k in expected_env_vars if not os.getenv(k)],
