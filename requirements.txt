@@ -1,1 +1,7 @@
 azure-functions
+pandas
+openpyxl
+azure-ai-projects
+azure-identity
+azure-storage-blob
+python-dotenv

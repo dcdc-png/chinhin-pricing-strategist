@@ -1,15 +1,9 @@
 import azure.functions as func
-import logging
+
+from routes.api import bp as api_bp
+from routes.pricing import bp as pricing_bp
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 
-@app.route(route="hello")
-def hello(req: func.HttpRequest) -> func.HttpResponse:
-    logging.info("HTTP trigger function received a request stupid shit.")
-
-    name = req.params.get("name", "World")
-
-    return func.HttpResponse(
-        f"Hello, {name}!",
-        status_code=200
-    )
+app.register_functions(api_bp)
+app.register_functions(pricing_bp)
