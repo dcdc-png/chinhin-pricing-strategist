@@ -2,8 +2,8 @@
 
 Welcome to the **Fiamma AI Pricing Strategist**, an intelligent decision-support tool designed to replace manual guesswork with data-driven pricing recommendations. This tool empowers sales managers to maximize profit margins, balance competitiveness, and optimize stock levels across all sales channels.
 
-**Web APP:** https://green-dune-0c54f0e10.2.azurestaticapps.net/
-**Challenge 9: Video Demo:** https://drive.google.com/drive/folders/1JlMNmcbt-FT_4eGmE7nfPHqVxtKSyeKa
+1. **Web APP:** https://green-dune-0c54f0e10.2.azurestaticapps.net/
+2. **Challenge 9: Video Demo:** https://drive.google.com/drive/folders/1JlMNmcbt-FT_4eGmE7nfPHqVxtKSyeKa
 
 ---
 
