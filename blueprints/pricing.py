@@ -10,10 +10,6 @@ import logging
 import threading
 
 import azure.functions as func
-import pandas as pd
-from azure.ai.projects import AIProjectClient
-from azure.identity import DefaultAzureCredential
-from azure.core.credentials import AzureKeyCredential
 
 bp = func.Blueprint()
 
@@ -55,6 +51,7 @@ def load_excel():
         return False
 
     try:
+        import pandas as pd
         xl = pd.ExcelFile(abs_path)
         _db["price"]      = xl.parse("Price Sheet")
         _db["sales"]      = xl.parse("Sales History")
@@ -73,6 +70,10 @@ def load_excel():
 # OpenAI client helper
 # ---------------------------------------------------------------------------
 def _get_openai_client():
+    from azure.ai.projects import AIProjectClient
+    from azure.identity import DefaultAzureCredential
+    from azure.core.credentials import AzureKeyCredential
+
     cfg = get_config()
     if not cfg["PROJECT_ENDPOINT"]:
         raise RuntimeError("PROJECT_ENDPOINT is not configured.")
@@ -150,6 +151,7 @@ def get_customers(req: func.HttpRequest) -> func.HttpResponse:
     if req.method == "OPTIONS":
         return _cors_preflight()
 
+    import pandas as pd
     if not load_excel() or "crm" not in _db:
         err_msg = "Excel data not loaded. "
         if not os.path.exists(os.path.abspath(get_config()["EXCEL_PATH"])):
@@ -182,6 +184,7 @@ def get_items(req: func.HttpRequest) -> func.HttpResponse:
     if req.method == "OPTIONS":
         return _cors_preflight()
 
+    import pandas as pd
     if not load_excel() or "price" not in _db:
         return func.HttpResponse(
             json.dumps({"error": "Excel data not available (check logs)"}),
@@ -211,6 +214,7 @@ def pricing_analysis(req: func.HttpRequest) -> func.HttpResponse:
     if req.method == "OPTIONS":
         return _cors_preflight()
 
+    import pandas as pd
     if not load_excel():
         return func.HttpResponse(
             json.dumps({"error": "Excel data not available"}),
@@ -409,6 +413,7 @@ def chat(req: func.HttpRequest) -> func.HttpResponse:
     if req.method == "OPTIONS":
         return _cors_preflight()
 
+    import pandas as pd
     # Load data (even if not strictly needed for chat, often good for context)
     load_excel()
 

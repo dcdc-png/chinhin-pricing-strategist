@@ -1,4 +1,3 @@
-import pandas as pd
 import logging
 import os
 from shared.config import EXCEL_PATH
@@ -10,6 +9,7 @@ def load_excel():
     if not os.path.exists(EXCEL_PATH):
         logging.warning(f"Excel file not found at '{EXCEL_PATH}'.")
         return
+    import pandas as pd
     xl = pd.ExcelFile(EXCEL_PATH)
     _db["price"]      = xl.parse("Price Sheet")
     _db["sales"]      = xl.parse("Sales History")
@@ -19,7 +19,7 @@ def load_excel():
         _db[key].columns = _db[key].columns.str.strip()
     logging.info(f"Loaded Excel: {EXCEL_PATH}")
 
-load_excel()
+# No top-level call for lazy loading
 
 def get_db() -> dict:
     return _db
