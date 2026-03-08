@@ -70,26 +70,28 @@ def load_excel():
 # OpenAI client helper
 # ---------------------------------------------------------------------------
 def _get_openai_client():
+    from openai import AzureOpenAI
     from azure.ai.projects import AIProjectClient
     from azure.identity import DefaultAzureCredential
-    from azure.core.credentials import AzureKeyCredential
 
     cfg = get_config()
     if not cfg["PROJECT_ENDPOINT"]:
         raise RuntimeError("PROJECT_ENDPOINT is not configured.")
     
-    # Use API Key if provided, else fallback to Managed Identity / DefaultAzureCredential
+    # Use API Key if provided, else fallback to Managed Identity (DefaultAzureCredential)
     if cfg["PROJECT_KEY"]:
-        logging.info("Using AzureKeyCredential for AIProjectClient")
-        credential = AzureKeyCredential(cfg["PROJECT_KEY"])
+        logging.info("Using AzureOpenAI directly with API Key")
+        return AzureOpenAI(
+            azure_endpoint=cfg["PROJECT_ENDPOINT"],
+            api_key=cfg["PROJECT_KEY"],
+            api_version="2024-05-01-preview"
+        )
     else:
-        logging.info("Using DefaultAzureCredential for AIProjectClient")
-        credential = DefaultAzureCredential()
-
-    return AIProjectClient(
-        endpoint=cfg["PROJECT_ENDPOINT"],
-        credential=credential,
-    ).get_openai_client()
+        logging.info("Using AIProjectClient with DefaultAzureCredential")
+        return AIProjectClient(
+            endpoint=cfg["PROJECT_ENDPOINT"],
+            credential=DefaultAzureCredential(),
+        ).get_openai_client()
 
 
 # ---------------------------------------------------------------------------
