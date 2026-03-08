@@ -39,8 +39,10 @@ jobs:
         shell: bash
         run: |
           mkdir build_output
-          # Copy only necessary backend files and folders
-          cp -r blueprints function_app.py host.json local.settings.json requirements.txt shared data.xlsx .python_packages build_output/
+          # Use rsync to copy everything except the large frontend folder and git noise
+          rsync -av . build_output/ --exclude frontend --exclude .git --exclude .github --exclude .venv --exclude node_modules --exclude out --exclude build_output --exclude ".python_packages" # Exclude source dot-pkg
+          # Re-copy the local packages we just installed
+          cp -r .python_packages build_output/
           ls -R build_output
 
       - name: Upload artifact for deployment job
