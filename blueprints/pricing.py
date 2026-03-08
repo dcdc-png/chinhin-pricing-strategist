@@ -219,7 +219,7 @@ def pricing_analysis(req: func.HttpRequest) -> func.HttpResponse:
     market_low  = float(comp.get("Market Low (RM)",  list_price * 0.80)) if comp else list_price * 0.80
     market_high = float(comp.get("Market High (RM)", list_price))        if comp else list_price
 
-    prompt = f\"\"\"
+    prompt = f"""
 You are a pricing strategist. Analyze the following data and return a JSON object (and ONLY a JSON object, no markdown, no explanation) with this exact structure:
 
 {{
@@ -251,7 +251,7 @@ Rules:
 - factor in the customer's Loyalty Tier, Price Sensitivity, and Avg Discount Requested %
 - recommended_price is the best single price for a typical order from this customer
 - Respond with ONLY the JSON object, no code fences, no extra text.
-\"\"\"
+"""
 
     # Run agent synchronously in a thread and collect SSE output
     result_chunks: list[str] = []
