@@ -19,11 +19,15 @@ bp = func.Blueprint()
 # ---------------------------------------------------------------------------
 # Config (from Application Settings / local.settings.json)
 # ---------------------------------------------------------------------------
-PROJECT_ENDPOINT = os.getenv("PROJECT_ENDPOINT", "")
-AGENT_NAME       = os.getenv("AZURE_AI_AGENT_NAME", "AI-Pricing-Strategist")
-AGENT_VERSION    = os.getenv("AZURE_AI_AGENT_VERSION", "3")
-AGENT_MODEL      = os.getenv("AZURE_AI_AGENT_MODEL", "gpt-4.1-nano")
-EXCEL_PATH       = os.getenv("EXCEL_PATH", "data.xlsx")
+def get_config():
+    """Helper to fetch config only when needed (after env vars load)."""
+    return {
+        "PROJECT_ENDPOINT": os.getenv("PROJECT_ENDPOINT", ""),
+        "AGENT_NAME":       os.getenv("AZURE_AI_AGENT_NAME", "AI-Pricing-Strategist"),
+        "AGENT_VERSION":    os.getenv("AZURE_AI_AGENT_VERSION", "3"),
+        "AGENT_MODEL":      os.getenv("AZURE_AI_AGENT_MODEL", "gpt-4.1-nano"),
+        "EXCEL_PATH":       os.getenv("EXCEL_PATH", "data.xlsx"),
+    }
 
 # ---------------------------------------------------------------------------
 # Excel DB (loaded once at cold-start via module import in function_app.py)
@@ -32,28 +36,46 @@ _db: dict = {}
 
 
 def load_excel():
+    """Ensures Excel data is loaded into memory."""
     global _db
-    if not os.path.exists(EXCEL_PATH):
-        logging.warning("Excel file not found at '%s'.", EXCEL_PATH)
-        return
-    xl = pd.ExcelFile(EXCEL_PATH)
-    _db["price"]      = xl.parse("Price Sheet")
-    _db["sales"]      = xl.parse("Sales History")
-    _db["competitor"] = xl.parse("Competitor Pricing")
-    _db["crm"]        = xl.parse("CRM Sheet")
-    for key in _db:
-        _db[key].columns = _db[key].columns.str.strip()
-    logging.info("Loaded Excel from '%s'.", EXCEL_PATH)
+    if _db:
+        return True # already loaded
+
+    cfg = get_config()
+    excel_path = cfg["EXCEL_PATH"]
+    abs_path = os.path.abspath(excel_path)
+    
+    logging.info("Current working directory: %s", os.getcwd())
+    logging.info("Attempting to load Excel from: %s", abs_path)
+
+    if not os.path.exists(abs_path):
+        logging.error("Excel file NOT FOUND at '%s'.", abs_path)
+        return False
+
+    try:
+        xl = pd.ExcelFile(abs_path)
+        _db["price"]      = xl.parse("Price Sheet")
+        _db["sales"]      = xl.parse("Sales History")
+        _db["competitor"] = xl.parse("Competitor Pricing")
+        _db["crm"]        = xl.parse("CRM Sheet")
+        for key in _db:
+            _db[key].columns = _db[key].columns.str.strip()
+        logging.info("Successfully loaded Excel with sheets: %s", list(_db.keys()))
+        return True
+    except Exception as e:
+        logging.error("Failed to load Excel: %s", str(e))
+        return False
 
 
 # ---------------------------------------------------------------------------
 # OpenAI client helper
 # ---------------------------------------------------------------------------
 def _get_openai_client():
-    if not PROJECT_ENDPOINT:
+    cfg = get_config()
+    if not cfg["PROJECT_ENDPOINT"]:
         raise RuntimeError("PROJECT_ENDPOINT is not configured.")
     return AIProjectClient(
-        endpoint=PROJECT_ENDPOINT,
+        endpoint=cfg["PROJECT_ENDPOINT"],
         credential=DefaultAzureCredential(),
     ).get_openai_client()
 
@@ -85,6 +107,31 @@ def _cors_preflight() -> func.HttpResponse:
 
 
 # ===========================================================================
+# GET /api/diag — Diagnostics
+# ===========================================================================
+@bp.route(route="diag", methods=["GET", "OPTIONS"])
+def diagnostics(req: func.HttpRequest) -> func.HttpResponse:
+    if req.method == "OPTIONS":
+        return _cors_preflight()
+    
+    cfg = get_config()
+    diag_data = {
+        "cwd": os.getcwd(),
+        "files_in_root": os.listdir("."),
+        "excel_path_env": cfg["EXCEL_PATH"],
+        "excel_path_abs": os.path.abspath(cfg["EXCEL_PATH"]),
+        "excel_exists": os.path.exists(os.path.abspath(cfg["EXCEL_PATH"])),
+        "env_keys_present": [k for k in cfg.keys() if os.getenv(k)],
+        "missing_keys": [k for k in cfg.keys() if not os.getenv(k)],
+    }
+    return func.HttpResponse(
+        json.dumps(diag_data, indent=2),
+        mimetype="application/json",
+        headers={"Access-Control-Allow-Origin": "*"},
+    )
+
+
+# ===========================================================================
 # GET /api/customers
 # ===========================================================================
 @bp.route(route="customers", methods=["GET", "OPTIONS"])
@@ -92,11 +139,15 @@ def get_customers(req: func.HttpRequest) -> func.HttpResponse:
     if req.method == "OPTIONS":
         return _cors_preflight()
 
-    if "crm" not in _db:
+    if not load_excel() or "crm" not in _db:
+        err_msg = "Excel data not loaded. "
+        if not os.path.exists(os.path.abspath(get_config()["EXCEL_PATH"])):
+            err_msg += f"File not found at {os.path.abspath(get_config()['EXCEL_PATH'])}"
         return func.HttpResponse(
-            json.dumps({"error": "Excel not loaded"}),
+            json.dumps({"error": err_msg}),
             status_code=503,
             mimetype="application/json",
+            headers={"Access-Control-Allow-Origin": "*"},
         )
     crm = _db["crm"]
     customers = (
@@ -120,11 +171,12 @@ def get_items(req: func.HttpRequest) -> func.HttpResponse:
     if req.method == "OPTIONS":
         return _cors_preflight()
 
-    if "price" not in _db:
+    if not load_excel() or "price" not in _db:
         return func.HttpResponse(
-            json.dumps({"error": "Excel not loaded"}),
+            json.dumps({"error": "Excel data not available (check logs)"}),
             status_code=503,
             mimetype="application/json",
+            headers={"Access-Control-Allow-Origin": "*"},
         )
     price = _db["price"]
     items = (
@@ -148,11 +200,12 @@ def pricing_analysis(req: func.HttpRequest) -> func.HttpResponse:
     if req.method == "OPTIONS":
         return _cors_preflight()
 
-    if not _db:
+    if not load_excel():
         return func.HttpResponse(
-            json.dumps({"error": "Excel not loaded"}),
+            json.dumps({"error": "Excel data not available"}),
             status_code=503,
             mimetype="application/json",
+            headers={"Access-Control-Allow-Origin": "*"},
         )
 
     try:
@@ -260,16 +313,17 @@ Rules:
 
     def run_agent():
         try:
+            cfg       = get_config()
             client    = _get_openai_client()
             full_text = ""
 
             with client.responses.stream(
-                model=AGENT_MODEL,
+                model=cfg["AGENT_MODEL"],
                 input=[{"role": "user", "content": prompt}],
                 extra_body={
                     "agent_reference": {
-                        "name": AGENT_NAME,
-                        "version": AGENT_VERSION,
+                        "name": cfg["AGENT_NAME"],
+                        "version": cfg["AGENT_VERSION"],
                         "type": "agent_reference",
                     }
                 },
@@ -344,6 +398,9 @@ def chat(req: func.HttpRequest) -> func.HttpResponse:
     if req.method == "OPTIONS":
         return _cors_preflight()
 
+    # Load data (even if not strictly needed for chat, often good for context)
+    load_excel()
+
     try:
         body = req.get_json()
     except ValueError:
@@ -377,19 +434,20 @@ def chat(req: func.HttpRequest) -> func.HttpResponse:
 
     def run_chat():
         try:
+            cfg       = get_config()
             client    = _get_openai_client()
             full_text = ""
 
             with client.responses.stream(
-                model=AGENT_MODEL,
+                model=cfg["AGENT_MODEL"],
                 input=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user",   "content": message},
                 ],
                 extra_body={
                     "agent_reference": {
-                        "name": AGENT_NAME,
-                        "version": AGENT_VERSION,
+                        "name": cfg["AGENT_NAME"],
+                        "version": cfg["AGENT_VERSION"],
                         "type": "agent_reference",
                     }
                 },
