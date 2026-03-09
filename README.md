@@ -2,8 +2,7 @@
 
 Welcome to the **Fiamma AI Pricing Strategist**, an intelligent decision-support tool designed to replace manual guesswork with data-driven pricing recommendations. This tool empowers sales managers to maximize profit margins, balance competitiveness, and optimize stock levels across all sales channels.
 
-1. **Web APP:** https://green-dune-0c54f0e10.2.azurestaticapps.net/
-2. **Challenge 9: Video Demo:** https://drive.google.com/drive/folders/1JlMNmcbt-FT_4eGmE7nfPHqVxtKSyeKa
+**Web APP:** https://green-dune-0c54f0e10.2.azurestaticapps.net/
 
 ---
 
@@ -22,27 +21,29 @@ The application is secured using Microsoft Entra ID (Azure AD), ensuring that on
 
 ## 2. How to Use the Solution
 
-The core of the application is the **Pricing Dashboard**, where you can simulate scenarios, view AI recommendations, and lock in the optimal price for bulk orders. 
+The core of the application is the **Pricing Dashboard**, where you can select specific deals, view AI recommendations, and visualize the optimal price vs. order volume.
 
 Here is a step-by-step workflow when a new order request comes in:
 
-### Step 1: Input Deal Parameters (Margin Simulator)
-* **Customer** — A dropdown labelled "Select customer...". Choose the dealer or customer account for whom you are preparing the pricing quote.
-• **Item** — A dropdown labelled "Select item...". Choose the specific product SKU or item you wish to price.
+### Step 1: Input Analysis Parameters
+Use the **Analysis Parameters** panel to define the current deal you want to analyze. Use the dropdowns to instantly pull in context:
+* **Customer**: Select the customer from your database (this automatically retrieves their loyalty tier and price sensitivity).
+* **Item**: Select the specific product they are inquiring about.
+* Click the **"Analyze Pricing"** button to run the live AI pricing engine.
 
-### Step 2: Review the AI Rationale
-Scroll down to the **AI Pricing Rationale** panel to see the exact price recommended by the engine. The AI provides a "Smart Why" rationale, breaking down the factors that influenced the decision. 
-Review the individual impact cards to see how the following data points contributed to the final price: 
-* **Customer Purchase History**: Adjustments made for loyalty and repeat purchasing behavior.
-* **Stock Aging**: Discounts dynamically applied or withheld based on how long the inventory has been sitting in the warehouse.
-* **Market Demand**: Price elasticity adjustments based on current product demand.
-* **Competitor Pricing**: Strategic positioning to win the deal without needlessly sacrificing margin against competitors.
+### Step 2: Evaluate the Pricing Chart
+Review the **Price vs Quantity Analysis** chart, which dynamically visualizes:
+* **Optimal Price Curve**: The recommended sliding scale for the item's price depending on the order quantity.
+* **Historical Data**: A scatter plot of actual past prices paid for this item to help ground your decision.
+* **Price Floors & Limits**: Clear horizontal reference lines for your Minimum Price Floor, standard List Price, and the newly calculated Recommended Price.
 
-### Step 3: Finalize the Quote
-Use the summarized AI insights to confidently generate a quote for the dealer, knowing exactly how the price balances win-probability against gross margin.
+### Step 3: Review the AI Rationale
+Scroll down to the **AI Pricing Rationale** panel to read the AI's transparent reasoning. This section provides the precise recommended price, your maximum allowable percentage discount limit, and a textual breakdown of the logic behind the number.
 
-### Step 4: Consult the AI Assistant
-If you need further clarification or want to test edge cases, click the **Floating Chat Icon** in the bottom right corner. This opens the *Microsoft AI Foundry Assistant* where you can ask natural language questions (e.g., *"What happens to our margin if I offer a 10% discount to clear aging stock?"*).
+### Step 4: Consult the Context-Aware AI Assistant
+If you need further clarification on margins or want to evaluate edge cases, click the **Floating Chat Icon** in the bottom right corner to open the **Pricing Assistant**.
+* Powered by Azure AI Foundry, this chat interface is automatically aware of your currently selected customer, item, and recent pricing analysis.
+* Ask natural language questions (e.g., *"What happens to our margin if I offer a RM 100 discount off the recommended price?"*) and the AI will reply using the context of the active deal.
 
 ---
 
@@ -65,6 +66,7 @@ If you want to run the project locally on your machine, follow these step-by-ste
    ```bash
    npm install -g @azure/static-web-apps-cli
    ```
+4. **Azure CLI & Azure Functions Core Tools**: Required for the backend (ensure `az` extension / import is set up as well).
 
 ### Step-by-Step Guide
 1. **Clone the Repository**
@@ -74,22 +76,28 @@ If you want to run the project locally on your machine, follow these step-by-ste
    cd chinhin-pricing-strategist
    ```
 
-2. **Navigate to the Frontend Directory**
-   The application logic is contained within the `frontend` folder:
+2. **Run the Backend (Root Folder)**
+   In the root directory, start the backend:
+   ```bash
+   func start
+   ```
+
+3. **Navigate to the Frontend Directory**
+   Open a new terminal window/tab and navigate to the `frontend` folder:
    ```bash
    cd frontend
    ```
 
-3. **Install Dependencies**
-   Install all the required Node.js packages:
-   ```bash
-   npm install
-   ```
-
-4. **Run the Server with Local Emulator**
-   Start the application using the local development script. This script automatically runs the Next.js server along with the Azure Static Web Apps (SWA) emulator so that the Microsoft authentication flow works properly on your machine:
+4. **Run the Frontend Server with Local Emulator**
+   Start the application using the local development script. This script automatically runs the Next.js server along with the Azure SWA emulator:
    ```bash
    npm run dev:local
+   ```
+   
+   *Note: If the command above fails, do this first before rerunning it:*
+   ```bash
+   npm install
+   npm run build
    ```
 
 5. **Access the Application**
